@@ -3,10 +3,11 @@
 if [ -d "/home/frappe/frappe-bench/apps/frappe" ]; then
     echo "Bench already exists, skipping init"
     cd frappe-bench
+    bash /workspace/seed-templates.sh || echo "seed-templates.sh exited non-zero; continuing"
     bench start
-else
-    echo "Creating new bench..."
+    exit 0
 fi
+echo "Creating new bench..."
 
 bench init --skip-redis-config-generation frappe-bench --version version-15
 
@@ -38,5 +39,7 @@ bench --site helpdesk.localhost set-config mute_emails 1
 bench --site helpdesk.localhost set-config server_script_enabled 1
 bench --site helpdesk.localhost clear-cache
 bench use helpdesk.localhost
+
+bash /workspace/seed-templates.sh || echo "seed-templates.sh exited non-zero; continuing"
 
 bench start
