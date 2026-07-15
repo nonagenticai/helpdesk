@@ -43,30 +43,23 @@ def execute():
         ):
             ticket_responses[ticket_id]["last_customer_response"] = c.creation
 
-    # Build parameterized VALUES for bulk upsert. Use None for missing dates so DB gets NULL.
-    placeholders = []
-    params = []
+    # Portable upsert: the original used MariaDB-only `INSERT ... ON DUPLICATE KEY
+    # UPDATE ... VALUES(...)`. reference_name always points at existing tickets, so
+    # this is only ever an update — use frappe.db.set_value (engine-agnostic on
+    # MariaDB + Postgres). Runs once as a migration over <=180 days of tickets, so
+    # per-row updates are acceptable.
     for ticket_id, resp in ticket_responses.items():
-        # ensure ticket_id is not empty and use direct params to avoid quoting issues
         if not ticket_id or not str(ticket_id).strip():
             continue
-        placeholders.append("(%s, %s, %s)")
-        params.extend(
-            [
-                ticket_id,
-                resp["last_customer_response"],
-                resp["last_agent_response"],
-            ]
+        if not frappe.db.exists("HD Ticket", ticket_id):
+            continue
+        frappe.db.set_value(
+            "HD Ticket",
+            ticket_id,
+            {
+                "last_customer_response": resp["last_customer_response"],
+                "last_agent_response": resp["last_agent_response"],
+            },
+            update_modified=False,
         )
-
-    # Bulk update using parameterized query to avoid incorrect quoting/escaping
-    if placeholders:
-        sql = f"""
-            INSERT INTO `tabHD Ticket` (name, last_customer_response, last_agent_response)
-            VALUES {", ".join(placeholders)}
-            ON DUPLICATE KEY UPDATE
-                last_customer_response = VALUES(last_customer_response),
-                last_agent_response = VALUES(last_agent_response)
-        """
-        frappe.db.sql(sql, tuple(params))
-        frappe.db.commit()
+    frappe.db.commit()

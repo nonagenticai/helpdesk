@@ -471,6 +471,11 @@ def add_fts_index():
 
 
 def add_index_if_not_exists(table, column, index_name):
+    # MariaDB FULLTEXT indexes have no Postgres equivalent (PG uses tsvector/GIN).
+    # The RMT headless-REST demo does not use Helpdesk full-text search, so skip
+    # FTS index creation on Postgres rather than crash after_install.
+    if frappe.db.db_type != "mariadb":
+        return
     index_exists = frappe.db.sql(
         """
         SHOW INDEX FROM `{table}`

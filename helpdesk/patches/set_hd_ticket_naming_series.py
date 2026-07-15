@@ -3,6 +3,13 @@ from frappe import _
 
 
 def execute():
+    # Historical fixup for MariaDB installs whose HD Ticket `name` was an integer
+    # column; it reconciles the tabSeries counter after converting to VARCHAR. The
+    # queries below are MariaDB-only (DATABASE(), MODIFY COLUMN, CAST AS UNSIGNED,
+    # backtick idents). Fresh Postgres sites already have a VARCHAR primary key and
+    # no legacy integer names, so there is nothing to migrate — skip on non-MariaDB.
+    if frappe.db.db_type != "mariadb":
+        return
 
     alter_hd_ticket_name_column()
 

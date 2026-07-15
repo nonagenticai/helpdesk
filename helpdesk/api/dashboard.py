@@ -5,7 +5,7 @@ from functools import reduce
 import frappe
 from frappe import _
 from frappe.query_builder import DocType
-from frappe.query_builder.functions import Avg, Count, Function
+from frappe.query_builder.functions import Avg, Cast_, Count, Function
 from pypika import Case
 
 from helpdesk.utils import agent_only, is_frappe_version
@@ -111,11 +111,7 @@ class HelpdeskDashboard:
             conds.append(self.ticket.agent_group == self.team)
         if self.agent:
             # Pass args to Function(...) directly. ParameterizedFunction is not callable.
-            conds.append(
-                Function(
-                    "JSON_SEARCH", self.ticket._assign, "one", self.agent
-                ).isnotnull()
-            )
+            conds.append(self.ticket._assign.like(f'%"{self.agent}"%'))
         return conds
 
     def _get_case(self, start, end, value, func, extra_cond=None, date_field=None):
@@ -297,7 +293,7 @@ class HelpdeskDashboard:
         query = (
             frappe.qb.from_(self.ticket)
             .select(
-                Function("DATE", self.ticket.creation).as_("date"),
+                Cast_(self.ticket.creation, "date").as_("date"),
                 Count(
                     Case()
                     .when(self.ticket.status.isin(self.open_statuses), self.ticket.name)
@@ -328,8 +324,8 @@ class HelpdeskDashboard:
                 ).as_(sla_fulfilled_status),
             )
             .where(base_cond)
-            .groupby(Function("DATE", self.ticket.creation))
-            .orderby(Function("DATE", self.ticket.creation))
+            .groupby(Cast_(self.ticket.creation, "date"))
+            .orderby(Cast_(self.ticket.creation, "date"))
         )
 
         result = query.run(as_dict=True)
@@ -371,7 +367,7 @@ class HelpdeskDashboard:
         query = (
             frappe.qb.from_(self.ticket)
             .select(
-                Function("DATE", date_field).as_("date"),
+                Cast_(date_field, "date").as_("date"),
                 (
                     Avg(
                         Case()
@@ -389,8 +385,8 @@ class HelpdeskDashboard:
                 ).as_(rated_tickets),
             )
             .where(base_cond)
-            .groupby(Function("DATE", date_field))
-            .orderby(Function("DATE", date_field))
+            .groupby(Cast_(date_field, "date"))
+            .orderby(Cast_(date_field, "date"))
         )
 
         result = query.run(as_dict=True)
@@ -443,14 +439,14 @@ class HelpdeskDashboard:
             frappe.qb.from_(self.ticket)
             .select(
                 Count(self.ticket.name).as_("total_tickets"),
-                Function("DATEDIFF", self.to_date_next, self.from_date).as_("days"),
             )
             .where(base_cond)
         )
 
         result = query.run(as_dict=True)
         total_tickets = result[0].total_tickets or 0
-        days = result[0].days or 1
+        # DATEDIFF is MariaDB-only; compute the day span in Python (portable).
+        days = frappe.utils.date_diff(self.to_date_next, self.from_date) or 1
         return total_tickets / days
 
 
