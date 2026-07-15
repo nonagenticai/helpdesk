@@ -17,7 +17,7 @@ from frappe.utils import (
 
 from helpdesk.utils import capture_event, get_context, is_json_valid, publish_event
 
-from .utils import convert_to_seconds
+from .utils import convert_to_seconds, to_working_timedelta
 
 
 class HDServiceLevelAgreement(Document):
@@ -378,11 +378,11 @@ class HDServiceLevelAgreement(Document):
                 current_datetime, current_date
             )
             start_time = max(
-                current_workday_doc.start_time.total_seconds(), current_time_in_seconds
+                convert_to_seconds(current_workday_doc.start_time), current_time_in_seconds
             )
             till_start_time = max(start_time - current_time_in_seconds, 0)
             end_time = max(
-                current_workday_doc.end_time.total_seconds(), current_time_in_seconds
+                convert_to_seconds(current_workday_doc.end_time), current_time_in_seconds
             )
             time_left = max(end_time - start_time, 0)
             if not time_left:
@@ -404,7 +404,13 @@ class HDServiceLevelAgreement(Document):
     def get_working_hours(self) -> dict[str, dict]:
         res = {}
         for row in self.support_and_resolution:
-            res[row.workday] = (row.start_time, row.end_time)
+            # Normalize to timedelta so consumers (is_working_time,
+            # is_currently_outside_working_hours) work on both MariaDB (timedelta)
+            # and Postgres (datetime.time) Time-column representations.
+            res[row.workday] = (
+                to_working_timedelta(row.start_time),
+                to_working_timedelta(row.end_time),
+            )
         return res
 
     def is_working_time(self, date_time, working_hours):
@@ -450,8 +456,8 @@ class HDServiceLevelAgreement(Document):
                 continue
 
             workday = workdays[day_name]
-            work_start_seconds = workday.start_time.total_seconds()
-            work_end_seconds = workday.end_time.total_seconds()
+            work_start_seconds = convert_to_seconds(workday.start_time)
+            work_end_seconds = convert_to_seconds(workday.end_time)
 
             # Calculate day boundaries in seconds
             if current_date == start_time.date():

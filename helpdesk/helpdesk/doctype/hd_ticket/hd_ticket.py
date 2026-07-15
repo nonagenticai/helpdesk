@@ -380,7 +380,10 @@ class HDTicket(Document):
                 log_ticket_activity(self.name, msg)
 
     def generate_key(self):
-        self.key = uuid.uuid4()
+        # str(): psycopg2 cannot adapt a raw uuid.UUID object (MariaDB's driver
+        # tolerated it). The `key` column is a plain Data field, so store the string.
+        # uuid7 (time-ordered) per the platform standard; stdlib in Python 3.14+.
+        self.key = str(uuid.uuid7())
 
     def remove_assignment_if_not_in_team(self):
         """

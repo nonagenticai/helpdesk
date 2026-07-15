@@ -25,11 +25,11 @@ def execute(filters=None):
     data = frappe.db.sql(
         """
 		SELECT
-			date(creation) as creation_date,
+			CAST(creation AS date) as creation_date,
 			avg(first_response_time) as avg_response_time
 		FROM `tabHD Ticket`
 		WHERE
-			date(creation) between %s and %s
+			CAST(creation AS date) between %s and %s
 			and first_response_time > 0
 		GROUP BY creation_date
 		ORDER BY creation_date desc
