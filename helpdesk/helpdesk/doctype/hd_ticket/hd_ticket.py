@@ -418,8 +418,11 @@ class HDTicket(Document):
     def generate_key(self):
         # str(): psycopg2 cannot adapt a raw uuid.UUID object (MariaDB's driver
         # tolerated it). The `key` column is a plain Data field, so store the string.
-        # uuid7 (time-ordered) per the platform standard; stdlib in Python 3.14+.
-        self.key = str(uuid.uuid7())
+        # uuid7 (time-ordered) per the platform standard, but uuid.uuid7 only exists
+        # on Python 3.14+; fall back to uuid4 on older runtimes. The key is only an
+        # opaque lookup token (HD Email Feedback matches it by equality), so its
+        # ordering is irrelevant.
+        self.key = str(getattr(uuid, "uuid7", uuid.uuid4)())
 
     def remove_assignment_if_not_in_team(self):
         """
@@ -1406,9 +1409,20 @@ def _agent_query(user: str) -> str | None:
             query += " OR (`tabHD Ticket`.agent_group is null)"
         return query
 
-    query += " OR (JSON_SEARCH(`tabHD Ticket`._assign, 'all', {u}) IS NOT NULL)".format(
-        u=frappe.db.escape(user)
-    )
+    if frappe.db.db_type == "postgres":
+        # JSON_SEARCH is MariaDB-only. `_assign` is a Text column holding a
+        # json.dumps() list (e.g. '["a@x.com"]'), so match the quoted user as a
+        # substring. strpos avoids LIKE wildcards (`_` is common in emails) and
+        # tolerates NULL / non-JSON values, unlike a ::jsonb cast.
+        query += " OR (strpos(`tabHD Ticket`._assign, {u}) > 0)".format(
+            u=frappe.db.escape(f'"{user}"')
+        )
+    else:
+        query += (
+            " OR (JSON_SEARCH(`tabHD Ticket`._assign, 'all', {u}) IS NOT NULL)".format(
+                u=frappe.db.escape(user)
+            )
+        )
     team_names = [t.get("team_name") for t in teams]
     if team_names:
         query += " OR (" + _build_in_clause("agent_group", team_names) + ")"

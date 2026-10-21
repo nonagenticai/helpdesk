@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import frappe
 from frappe import _
 from frappe.query_builder import DocType
-from frappe.query_builder.functions import Count, Function
+from frappe.query_builder.functions import Cast_, Count, Function
 from frappe.utils import add_days, nowdate
 
 from helpdesk.api.agent_home.utils import calculate_percentage_change
@@ -16,6 +16,21 @@ DT_FIELD_MAP = {
     "HD Customer": "customer",
     "Contact": "contact",
 }
+
+
+def _date_format(field, mariadb_fmt: str, postgres_fmt: str):
+    """DATE_FORMAT is MariaDB-only; Postgres uses to_char with its own pattern."""
+    if frappe.db.db_type == "postgres":
+        return Function("TO_CHAR", field, postgres_fmt)
+    return Function("DATE_FORMAT", field, mariadb_fmt)
+
+
+def _group_terms(key, sort) -> tuple:
+    """Postgres requires every selected non-aggregate in GROUP BY; MariaDB keeps
+    grouping by `sort` only (unchanged). key/sort map 1:1 so results match."""
+    if frappe.db.db_type == "postgres" and key is not sort:
+        return (sort, key)
+    return (sort,)
 
 
 periods = {"last week": 7, "last month": 30, "last 3 months": 90, "last 6 months": 180}
@@ -130,24 +145,23 @@ def _get_sla_violations(
 
     def _query(from_date, to_date, grouped=False):
         Ticket = DocType("HD Ticket")
-        to_date_plus_one = Function(
-            "DATE_ADD", to_date, frappe.qb.terms.PseudoColumn("INTERVAL 1 DAY")
-        )
+        # DATE_ADD(.. INTERVAL ..) is MariaDB-only; compute the bound in Python.
+        to_date_plus_one = add_days(to_date, 1)
         if grouped:
             if bucket == "daily":
-                key = Function("DATE", Ticket.creation)
+                key = Cast_(Ticket.creation, "date")
                 sort = key
             elif bucket == "weekly":
                 # ISO year-week e.g. "2026-12"
-                key = Function("DATE_FORMAT", Ticket.creation, "%x-%v")
+                key = _date_format(Ticket.creation, "%x-%v", "IYYY-IW")
                 sort = key
             else:  # monthly
-                key = Function("DATE_FORMAT", Ticket.creation, "%b %Y")
-                sort = Function("DATE_FORMAT", Ticket.creation, "%Y%m")
+                key = _date_format(Ticket.creation, "%b %Y", "Mon YYYY")
+                sort = _date_format(Ticket.creation, "%Y%m", "YYYYMM")
             q = (
                 frappe.qb.from_(Ticket)
                 .select(key.as_("date"), Count(Ticket.name).as_("count"))
-                .groupby(sort)
+                .groupby(*_group_terms(key, sort))
                 .orderby(sort)
             )
         else:

@@ -10,7 +10,7 @@ group-by helpers the other master charts use.
 import frappe
 from frappe import _
 from frappe.query_builder import DocType
-from frappe.query_builder.functions import Count, Function
+from frappe.query_builder.functions import Cast_, Count
 from pypika import Order
 
 from helpdesk.api.dashboard import HD_TICKET, HelpdeskDashboard, get_bar_chart_config
@@ -56,7 +56,7 @@ class TagDashboard(HelpdeskDashboard):
     def get_tag_trend_chart(self) -> dict[str, any]:
         """Daily stack of the busiest tags, so a spike in one is visible."""
         tags = [tag_row.tag for tag_row in self.get_tag_counts(TREND_TAG_COUNT)]
-        date = Function("DATE", self.ticket.creation)
+        date = Cast_(self.ticket.creation, "date")  # DATE() is MariaDB-only
         rows = (
             self.get_tagged_tickets()
             .select(
