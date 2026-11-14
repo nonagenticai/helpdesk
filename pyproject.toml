@@ -28,3 +28,13 @@ index_html_path = "./helpdesk/www/helpdesk/index.html"
 Homepage = "https://frappe.io/helpdesk"
 Repository = "https://github.com/frappe/helpdesk.git"
 "Bug Reports" = "https://github.com/frappe/helpdesk/issues"
+
+# This repository is a vendored fork of an upstream Frappe app, not one of our
+# archetype services. `ty check .` cannot pass here by construction: the app
+# imports `frappe`, which only exists inside a bench virtualenv, so every module
+# reports unresolved-import before any real diagnostic. The pre-push hook's own
+# documentation names this case and this exact opt-out for external repos
+# (gitops-production/scripts/hooks/pre-push, "skip_ty = true (external repos)").
+# It affects the local push gate only; bench ignores unknown `tool.*` tables.
+[tool.local-ci]
+skip_ty = true
