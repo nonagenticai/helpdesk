@@ -389,13 +389,15 @@ export const convertToConditions = ({
       }
 
       if (typeof value === "string") {
-        valueStr = `"${value.replace(/"/g, '\\"')}"`;
+        valueStr = `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
       } else if (typeof value === "number" || typeof value === "boolean") {
         valueStr = String(value);
       } else if (value === null || value === undefined) {
         return op === "==" || op === "is" ? `not ${fieldAccess}` : fieldAccess;
       } else {
-        valueStr = `"${String(value).replace(/"/g, '\\"')}"`;
+        valueStr = `"${String(value)
+          .replace(/\\/g, "\\\\")
+          .replace(/"/g, '\\"')}"`;
       }
 
       return `${fieldAccess} ${op} ${valueStr}`;

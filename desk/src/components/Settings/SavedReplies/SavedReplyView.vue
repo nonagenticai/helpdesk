@@ -13,9 +13,8 @@
           @click="onShowPreview()"
           icon-left="lucide-eye"
           :disabled="
-            Boolean(
-              !savedReplyData.message?.replace(/<[^>]*>/g, '')?.trim()?.length
-            ) || isDirty
+            Boolean(!stripTags(savedReplyData.message ?? '').trim().length) ||
+            isDirty
           "
         />
         <Button
@@ -411,6 +410,17 @@ const updateSavedReply = async () => {
   toast.success(__("Saved reply updated successfully."));
 };
 
+/** Strip HTML tags to a fixed point so a fragment cannot reassemble into a tag. */
+function stripTags(value: string): string {
+  let text = value;
+  let previous: string;
+  do {
+    previous = text;
+    text = text.replace(/<[^>]*>/g, "");
+  } while (text !== previous);
+  return text;
+}
+
 const validateData = (key?: string) => {
   const validateField = (key: string) => {
     switch (key) {
@@ -423,9 +433,7 @@ const validateData = (key?: string) => {
         break;
 
       case "message":
-        if (
-          !savedReplyData.value.message?.replace(/<[^>]*>/g, "")?.trim()?.length
-        ) {
+        if (!stripTags(savedReplyData.value.message ?? "").trim().length) {
           errors.value.message = __("Response is required");
         } else {
           errors.value.message = "";
