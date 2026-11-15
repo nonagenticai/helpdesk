@@ -56,7 +56,13 @@ export interface SearchItem {
 
 /** Server highlights matches with <mark>; palette rows render plain text. */
 export function stripTags(value: string): string {
-  return (value ?? "").replace(/<[^>]*>/g, "");
+  let text = value ?? "";
+  let previous: string;
+  do {
+    previous = text;
+    text = text.replace(/<[^>]*>/g, "");
+  } while (text !== previous);
+  return text;
 }
 
 export interface TitleRun {
